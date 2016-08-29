@@ -222,7 +222,6 @@
     _sharedGsData = (GS_ADK_Data *)[[GS_ADK_Data class] sharedInstance];
     
    // sharedGsData.m_cObjDomainName = [[NSString alloc] initWithString:[[m_cObjDict valueForKey:[[m_cObjDict allKeys] objectAtIndex:indexPath.row]] objectForKey:@"hostName"]];
-    
     _sharedGsData.m_cObjDomainName = [NSString stringWithString:[[m_cObjDict valueForKey:[[m_cObjDict allKeys] objectAtIndex:indexPath.row]] objectForKey:@"hostName"]];
     
     _sharedGsData.m_gObjNodeIP = [NSString stringWithString:[[m_cObjDict valueForKey:[[m_cObjDict allKeys] objectAtIndex:indexPath.row]] objectForKey:@"ipAddress"]];

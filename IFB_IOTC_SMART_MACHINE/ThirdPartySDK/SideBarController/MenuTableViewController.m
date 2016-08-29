@@ -252,7 +252,6 @@
         NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString]];
         MBProgressHUD *progressHud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
         progressHud.labelText = @"Please Wait....";
-        progressHud.dimBackground = YES;
         [apiCallManager httpGetRequest:request resultCallBack:^(NSDictionary *result, NSString *error) {
             
             [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];

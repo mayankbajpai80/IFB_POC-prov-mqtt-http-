@@ -38,9 +38,11 @@
     AppUtils *appUtils;
     MQTTViewController *mqtt;
     GS_ADK_ServiceManager *m_gObjServiceManager;
-    NSMutableDictionary *mdnsServiceDataDict;
     NSMutableArray *onlineMACs;
-    NSMutableArray *onlineDevices;
+    NSDictionary *mdnsDict;
+    NSMutableDictionary *mdnsDictArray;
+    BOOL isServiceFound;
+    NSTimer *hideHUDTimer;
 }
 @end
 
@@ -74,7 +76,7 @@
     globalValues.mqtt = mqtt;
     // Local mdns service
     onlineMACs = [[NSMutableArray alloc] init];
-    onlineDevices = [[NSMutableArray alloc] init];
+    mdnsDictArray = [[NSMutableDictionary alloc] init];
 }
 
 - (void)didReceiveMemoryWarning {
@@ -95,21 +97,27 @@
         m_gObjServiceManager = [[GS_ADK_ServiceManager alloc] initWithTimeOut:0 namePattern:[NSArray arrayWithObjects:@"gslink_prov",@"prov",@"Prov",nil] textRecordPattern:[NSArray arrayWithObjects:@"gs_sys_prov",nil] serviceType:@"_http._tcp" domainName:@""];
         
         [m_gObjServiceManager setM_cObjDelegate:self];
+        [self showHUD];
         [m_gObjServiceManager startDiscovery];
         [self establishLocalSocketConnection];
     }
 }
 
+-(void)viewWillDisappear:(BOOL)animated {
+    [m_gObjServiceManager stopDiscovery];
+}
+
+#pragma mark - MDNS delegate Methods
+
 -(void)didUpdateSeriveInfo:(NSMutableDictionary *)pObjServiceInfo {
-    
-    NSLog(@"pObjServiceInfo = %@",pObjServiceInfo);
     
     if ([pObjServiceInfo isKindOfClass:[NSMutableDictionary class]]) {
         
         if([[pObjServiceInfo allKeys] count]>0)
         {
-            
-            NSString *serviceMAC = [[[[[[pObjServiceInfo allKeys] objectAtIndex:0] componentsSeparatedByString:@"_"] objectAtIndex:2] componentsSeparatedByString:@"-"] objectAtIndex:1];
+            isServiceFound = YES;
+            [self hideHUD];
+            NSString *serviceMAC = [[[[[[pObjServiceInfo allKeys] objectAtIndex:0] componentsSeparatedByString:@"_"] objectAtIndex:0] componentsSeparatedByString:@"-"] objectAtIndex:1];
             NSMutableString *macString = [[NSMutableString alloc] initWithString:@"20:f8:5e"];
             for (int i =0; i < serviceMAC.length; i++) {
                 if (i%2 == 0) {
@@ -119,23 +127,16 @@
                     [macString appendString:[NSString stringWithFormat:@"%c",[serviceMAC characterAtIndex:i]]];
                 }
             }
-            
+            NSLog(@"%@", macString);
             if (![onlineMACs containsObject:macString]) {
-                [onlineDevices addObject:[pObjServiceInfo valueForKey:[[pObjServiceInfo allKeys] objectAtIndex:0]]];
+                mdnsDict = nil;
+                mdnsDict = [pObjServiceInfo valueForKey:[[pObjServiceInfo allKeys] objectAtIndex:0]];
                 [onlineMACs addObject:macString];
-                NSLog(@"\nSevice Found:%@\nWith MAC:%@", [pObjServiceInfo allKeys],macString);
                 [self.deviceListTableView reloadData];
             }
-            
-            //NSString *serviceName = [NSString stringWithString:[mdnsServiceDataDict allKeys]];
-            
-            //NSString *hostName = [NSString stringWithString:[[mdnsServiceDataDict allKeys] valueForKey:@"hostName"]];
-            
-            //NSString *ipAddress = [NSString stringWithString:[[mdnsServiceDataDict allKeys] valueForKey:@"ipAddress"]];
-            
         }
         else {
-            NSLog(@"Sevice Fail...");
+            NSLog(@"No IFB Service found...");
         }
     }
 }
@@ -156,15 +157,41 @@
     [self.view addGestureRecognizer:[self revealViewController].panGestureRecognizer];
     
     // Add Right Bar Button
-    if ([globalValues.isLocal isEqualToString:@"no"]) {
-        self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"Refresh"] style:UIBarButtonItemStyleDone target:self action:@selector(refreshButtonAction)];
-    }
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"Refresh"] style:UIBarButtonItemStyleDone target:self action:@selector(refreshButtonAction)];
 }
 
 #pragma mark UINavigationBar Button Action
 
 -(void)refreshButtonAction {
-    [self getDeviceList];
+    if ([globalValues.isLocal isEqualToString:@"no"]) {
+        [self getDeviceList];
+    }
+    else {
+        [self showHUD];
+        [m_gObjServiceManager startDiscovery];
+    }
+}
+
+#pragma mark - HUD Methods
+-(void)showHUD {
+    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
+    hud.labelText = @"Scan Active devices...";
+    hideHUDTimer = [NSTimer scheduledTimerWithTimeInterval:10.0 target:self selector:@selector(hideHUD) userInfo:nil repeats:NO];
+}
+
+/**
+ *  Hide HUD after timeout.
+ */
+-(void)hideHUD {
+    if (isServiceFound) {
+        [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
+        [hideHUDTimer invalidate];
+        hideHUDTimer = nil;
+    }
+    else {
+        [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
+        [customViewUtils makeErrorToast:self andLabelText:@"No Active device found!"];
+    }
 }
 
 #pragma mark - Get List of devices
@@ -179,12 +206,10 @@
         [postData setObject:[sharedPrefrenceUtil getNSObject:USER_ID] forKey:@"userId"];
         [postData setObject:@"1" forKey:@"app_token"];
         MBProgressHUD *progressHud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
-        progressHud.dimBackground = YES;
         progressHud.labelText = @"Please Wait....";
         [apiCallManager httpPostRequest:request forPostData:postData resultCallBack:^(NSDictionary *result, NSString *error) {
             
             [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
-            NSLog(@"result is %@", result);
             if ([[result valueForKey: @"status"] boolValue]) {
                 // connect mqtt/cloud...
                 [mqtt connectMQTT];
@@ -196,7 +221,6 @@
                 deviceMacArray = [deviceListArray valueForKey:@"mac"];
                 deviceStatusArray = [deviceListArray valueForKey:@"status"];
                 [self.deviceListTableView reloadData];
-                NSLog(@"%@", deviceMacArray);
             }
             else {
                 [customViewUtils makeErrorToast:self andLabelText:@"Something went wrong! "];
@@ -248,9 +272,9 @@
         }
     }
     else {
-        NSLog(@"%@",onlineMACs);
-        NSLog(@"%@",deviceMacArray);
+        
         if ([onlineMACs containsObject:[deviceMacArray objectAtIndex:indexPath.row]]) {
+            [mdnsDictArray setObject:mdnsDict forKey:[deviceNameArray objectAtIndex:indexPath.row]];
             cell.deviceStatus.backgroundColor = [UIColor greenColor];
         }
         else {
@@ -263,15 +287,31 @@
 -(void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     
     if ([globalValues.isLocal isEqualToString:@"no"]) {
-        // subscribe for device.
-        [sharedPrefrenceUtil saveNSObject:[deviceMacArray objectAtIndex:indexPath.row] forKey:@"currentDeviceMac"];
-        NSString *subscribeTopic = [NSString stringWithFormat:@"Response/%@", [deviceMacArray objectAtIndex:indexPath.row ]];
-        [globalValues.mqtt subscribeForTopic:subscribeTopic];
+        
+        if ([(NSString *)[[deviceListArray objectAtIndex:indexPath.row] valueForKey:@"status"] isEqualToString: @"Connected"]) {
+            // subscribe for device.
+            [sharedPrefrenceUtil saveNSObject:[deviceMacArray objectAtIndex:indexPath.row] forKey:@"currentDeviceMac"];
+            NSString *subscribeTopic = [NSString stringWithFormat:@"Response/%@", [deviceMacArray objectAtIndex:indexPath.row ]];
+            [globalValues.mqtt subscribeForTopic:subscribeTopic];
+            [self enterInDevice:indexPath];
+        }
+        else {
+            [customViewUtils makeErrorToast:self andLabelText:@"Device is Offline."];
+        }
     }
     else {
         // get ip address of selected device and ping that device.
+        
+        NSString *validIPAddress = [[[[mdnsDictArray objectForKey:[deviceNameArray objectAtIndex:indexPath.row]] objectForKey:@"ipAddress"] componentsSeparatedByString:@":"] objectAtIndex:0];
+        if (validIPAddress != nil) {
+            [sharedPrefrenceUtil saveNSObject:validIPAddress forKey:LOCAL_IP_ADDRESS];
+            [self enterInDevice:indexPath];
+        }
+        else {
+            [customViewUtils makeErrorToast:self andLabelText:@"Device is Offline."];
+        }
     }
-    [self enterInDevice:indexPath];
+    
 }
 
 -(void)enterInDevice: (NSIndexPath *)indexPath {

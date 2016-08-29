@@ -84,7 +84,7 @@
 
 - (IBAction)goOffline:(id)sender {
     
-    globalValues.isLocal = @"no";
+    globalValues.isLocal = @"yes";
     UIViewController *viewController = [customViewUtils loadUserHomeView];
     [[UIApplication sharedApplication] keyWindow].rootViewController = viewController;
 }
@@ -103,7 +103,6 @@
         [postData setObject:self.passwordTextField.text forKey:@"password"];
         [postData setObject:@"1" forKey:@"app_token"];
         MBProgressHUD *progressHud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
-        progressHud.dimBackground = YES;
         progressHud.labelText = @"Please Wait....";
         [apiCallManager httpPostRequest:request forPostData:postData resultCallBack:^(NSDictionary *result, NSString *error) {
             

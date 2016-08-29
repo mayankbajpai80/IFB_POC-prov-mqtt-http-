@@ -34,7 +34,6 @@
     BOOL isConnectionFail;
     BOOL isChangeProgram;
     BOOL isReadStatus;
-    NSTimer *hideHUDTimer;
     HTTPConnection *httpConnection;
     NSMutableArray *byteArray;
 }
@@ -66,9 +65,11 @@
     runningProgramIndex = -1;
     isProgramSelect = NO;
     isChangeProgram = NO;
-    isReadStatus = YES;
     [self setUI];
     if ([globalValues.isLocal isEqualToString:@"no"]) {
+        isReadStatus = YES;
+        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
+        hud.labelText = @"Please wait...";
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(getRunningProgram:) name:@"getRunningProgram" object:nil];
         [globalValues.mqtt publish:[NSString stringWithFormat:@"Command/%@",[sharedPrefrenceUtil getNSObject:SELECTED_DEVICE_MAC]] withCommand:Machine_GET_STATUS];
     }
@@ -82,8 +83,6 @@
 -(void)viewWillDisappear:(BOOL)animated {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     selectedIndexPath = nil;
-    [hideHUDTimer invalidate];
-    hideHUDTimer = nil;
 }
 
 #pragma mark - Customize navigation bar
@@ -106,44 +105,6 @@
     [self.navigationController popViewControllerAnimated:YES];
 }
 
-#pragma mark - HUD Methods
-
-/**
- *  Show HUD.
- */
--(void)showHUD {
-    progressHUD =[MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
-    [progressHUD setLabelText:@"Please wait..."];
-    progressHUD.dimBackground = YES;
-    isConnectionFail = YES;
-    hideHUDTimer = [NSTimer scheduledTimerWithTimeInterval:11.0 target:self selector:@selector(hideHUD) userInfo:nil repeats:NO];
-}
-
-/**
- *  Hide HUD after timeout.
- */
--(void)hideHUD {
-    if (isConnectionFail) {
-        [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
-        [customViewUtils makeErrorToast:self andLabelText:@"Device is not connected."];
-        runningProgramIndex = -2;
-    }
-    else {
-        runningProgramIndex = -2;
-        [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
-        [customViewUtils makeErrorToast:self andLabelText:@"Please Try Again."];
-    }
-}
-
-/**
- *  Hide HUD after success of the operation.
- */
--(void)hideHUDOnSuccess {
-    [hideHUDTimer invalidate];
-    hideHUDTimer = nil;
-    [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
-}
-
 /**
  *  Get Current state of machine.
  */
@@ -152,7 +113,8 @@
 -(void)sendLocalCommand: (NSArray *)postDataArray {
     
     [byteArray removeAllObjects];
-    NSString *urlString = @"http://10.0.6.209/gainspan/profile/tls?t=1470715355439";
+    NSString *urlString = [NSString stringWithFormat:@"http://%@/gainspan/profile/tls?t=1470715355439",[sharedPrefrenceUtil getNSObject:LOCAL_IP_ADDRESS]];
+    //NSString *urlString = @"http://10.0.6.209/gainspan/profile/tls?t=1470715355439";
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString]];
     NSMutableDictionary *postData = [[NSMutableDictionary alloc] init];
     Byte myByteArray[25];
@@ -166,8 +128,7 @@
     MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
     hud.labelText = @"Please Wait...";
     [httpConnection httpPostRequest:request forPostData:postData resultCallBack:^(NSDictionary *result, NSString *error) {
-        
-        [MBProgressHUD hideHUDForView:self.navigationController.view animated:YES];
+        [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
         NSData *data = [result valueForKey:@"data"];
         NSUInteger len = data.length;
         uint8_t *bytes = (uint8_t *)[data bytes];
@@ -176,13 +137,14 @@
             [byteArray addObject:[NSString stringWithFormat:@"%hhu",bytes[i]]];
         }
         if (byteArray.count > 37) {
-            [self getLocalRunningProgram:byteArray];
+            [self setCurrentState:byteArray];
         }
     }];
 }
 
--(void)getLocalRunningProgram:(NSArray *)theArray {
+-(void)setCurrentState:(NSArray *)theArray {
     
+
     if (theArray.count > 37) {
         
         NSLog(@"command is: %@", [theArray objectAtIndex:5]);
@@ -195,9 +157,14 @@
             if ([[theArray objectAtIndex:5] integerValue] == 4)    // change program
             {
                 if (selectedIndexPath != nil) {
+                    [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
                     [self setProgram:selectedIndexPath];
                     return;
                 }
+            }
+            else if (isReadStatus) {
+                isReadStatus = NO;
+                [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
             }
             // Set states or programmes
             runningprogram = [commonParsing getProgramString:[[theArray objectAtIndex:6] integerValue]];
@@ -214,7 +181,7 @@
         }
         else if ([[theArray objectAtIndex:2] integerValue]== 131) {
             // program commands
-            [MBProgressHUD hideHUDForView:self.view animated:YES];
+            [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
             DeviceOpertaionViewController *programVC = [self.storyboard instantiateViewControllerWithIdentifier:@"DeviceOpertaionViewController"];
             [self.navigationController pushViewController:programVC animated:YES];
         }
@@ -232,45 +199,8 @@
 -(void)getRunningProgram:(NSNotification *)notification {
     
     NSArray  *theArray = [[notification userInfo] objectForKey:@"myArray"];
-    if (theArray.count > 37) {
-        
-        NSLog(@"command is: %@", [theArray objectAtIndex:5]);
-        NSLog(@"program is: %@", [theArray objectAtIndex:6]);
-        NSLog(@"type is :%@",[theArray objectAtIndex:2]);
-        
-        if ([[theArray objectAtIndex:2] integerValue]== 129) {
-            
-            
-            if ([[theArray objectAtIndex:5] integerValue] == 4)    // change program
-            {
-                if (selectedIndexPath != nil) {
-                    [self setProgram:selectedIndexPath];
-                    return;
-                }
-            }
-            // Set states or programmes
-            runningprogram = [commonParsing getProgramString:[[theArray objectAtIndex:6] integerValue]];
-            
-            if ([runningprogram isEqualToString: @"No Program"]) {
-                runningProgramIndex = -1;
-            }
-            else {
-                if ([washProgramListArray containsObject:runningprogram]) {
-                    runningProgramIndex = [washProgramListArray indexOfObject:runningprogram];
-                }
-            }
-            [self.washProgramTableView reloadData];
-        }
-        else if ([[theArray objectAtIndex:2] integerValue]== 131) {
-            // program commands
-            [MBProgressHUD hideHUDForView:self.view animated:YES];
-            DeviceOpertaionViewController *programVC = [self.storyboard instantiateViewControllerWithIdentifier:@"DeviceOpertaionViewController"];
-            [self.navigationController pushViewController:programVC animated:YES];
-        }
-    }
-    else {
-        // error case
-    }
+    [self setCurrentState:theArray];
+    
 }
 
 #pragma mark - UITableview delegate methods
@@ -298,14 +228,12 @@
     cell.washProgramLabel.text = [washProgramListArray objectAtIndex:indexPath.row];
     if (indexPath.row == runningProgramIndex) {
         
-        
         cell.backgroundColor = [UIColor colorWithRed:93.0/255.0 green:206.0/255.0 blue:244.0/255.0 alpha:1.0];
         cell.washProgramLabel.textColor = [UIColor whiteColor];
     }
     else {
         cell.backgroundColor = [UIColor clearColor];
         cell.washProgramLabel.textColor = [UIColor colorWithRed:93.0/255.0 green:206.0/255.0 blue:244.0/255.0 alpha:1.0];
-        
     }
     return cell;
 }
@@ -322,6 +250,9 @@
             
                 selectedIndexPath = indexPath;
                 if ([globalValues.isLocal isEqualToString:@"no"]) {
+                    
+                    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
+                    hud.labelText = @"Please wait...";
                     [globalValues.mqtt publish:[NSString stringWithFormat:@"Command/%@",[sharedPrefrenceUtil getNSObject:SELECTED_DEVICE_MAC]] withCommand:Machine_programChange];
                 }
                 else {
@@ -360,6 +291,8 @@
  */
 -(void)setProgram :(NSIndexPath *)indexPath {
     
+    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
+    hud.labelText = @"Please wait...";
     NSArray *selectedProgram;
     if (indexPath.row == 0) {
         selectedProgram = Program_Cotton;

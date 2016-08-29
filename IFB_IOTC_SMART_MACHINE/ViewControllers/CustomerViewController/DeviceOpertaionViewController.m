@@ -31,11 +31,9 @@
     MBProgressHUD *progressHUD;
     BOOL isConnectionFail;
     CustomViewUtils *customViewUtils;
-    NSTimer *hideHUDTimer;
     HTTPConnection *conncetion;
-    
     NSMutableArray *byteArray; // response array
-    
+    BOOL isReadStatus;
 }
 @end
 
@@ -56,6 +54,10 @@
 -(void)viewWillAppear:(BOOL)animated {
     [self setUI];
     if ([globalValues.isLocal isEqualToString:@"no"]) {
+        isReadStatus = YES;
+        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
+        hud.labelText = @"Please wait...";
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(getCurrentStatus:) name:@"getCurrentStatus" object:nil];
         [globalValues.mqtt publish:[NSString stringWithFormat:@"Command/%@",[sharedPrefrenceUtil getNSObject:SELECTED_DEVICE_MAC]] withCommand:Machine_GET_STATUS];
     }
     else {
@@ -63,8 +65,9 @@
     }
     error1 = [[NSMutableArray alloc] init];
     error2 = [[NSMutableArray alloc] init];
+    
     [sharedPrefrenceUtil getNSObject:SELECTED_DEVICE_INFO];
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(getCurrentStatus:) name:@"getCurrentStatus" object:nil];
+    
 }
 
 
@@ -75,8 +78,6 @@
 
 -(void)viewWillDisappear:(BOOL)animated {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    [hideHUDTimer invalidate];
-    hideHUDTimer = nil;
 }
 
 #pragma mark - Customize navigation bar
@@ -113,47 +114,14 @@
  */
 -(void)refreshButtonAction {
     if ([globalValues.isLocal isEqualToString:@"no"]) {
+        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
+        hud.labelText = @"Please wait...";
+        isReadStatus = YES;
         [globalValues.mqtt publish:[NSString stringWithFormat:@"Command/%@",[sharedPrefrenceUtil getNSObject:SELECTED_DEVICE_MAC]] withCommand:Machine_GET_STATUS];
     }
     else {
         [self sendCommand:Machine_GET_STATUS];
     }
-}
-
-#pragma mark - HUD Methods
-
-/**
- *  Show HUD.
- */
--(void)showHUD {
-    progressHUD =[MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
-    [progressHUD setLabelText:@"Please wait..."];
-    progressHUD.dimBackground = YES;
-    isConnectionFail = YES;
-    hideHUDTimer = [NSTimer scheduledTimerWithTimeInterval:11.0 target:self selector:@selector(hideHUD) userInfo:nil repeats:NO];
-}
-
-/**
- *  Hide HUD after timeout.
- */
--(void)hideHUD {
-    if (isConnectionFail) {
-        [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
-        [customViewUtils makeErrorToast:self andLabelText:@"Device is not connected."];
-    }
-    else {
-        [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
-        [customViewUtils makeErrorToast:self andLabelText:@"Please Try Again!"];
-    }
-}
-
-/**
- *  Hide HUD after success of the operation.
- */
--(void)hideHUDOnSuccess {
-    [hideHUDTimer invalidate];
-    hideHUDTimer = nil;
-    [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
 }
 
 #pragma mark - Button Actions
@@ -168,7 +136,8 @@
 }
 
 - (IBAction)playPauseButtonAction:(id)sender {
-    
+    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
+    hud.labelText = @"Please wait...";
     if (isMachineStart) {
         if ([globalValues.isLocal isEqualToString:@"no"]) {
             [globalValues.mqtt publish:[NSString stringWithFormat:@"Command/%@",[sharedPrefrenceUtil getNSObject:SELECTED_DEVICE_MAC]] withCommand:Machine_PAUSE];
@@ -189,6 +158,8 @@
 
 - (IBAction)changeProgram:(id)sender {
     
+    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
+    hud.labelText = @"Please wait...";
     if ([globalValues.isLocal isEqualToString:@"no"]) {
         [globalValues.mqtt publish:[NSString stringWithFormat:@"Command/%@",[sharedPrefrenceUtil getNSObject:SELECTED_DEVICE_MAC]] withCommand:Machine_programChange];
     }
@@ -202,7 +173,7 @@
 -(void)sendCommand: (NSArray *)postDataArray {
     
     [byteArray removeAllObjects];
-    NSString *urlString = @"http://10.0.6.209/gainspan/profile/tls?t=1470715355439";
+    NSString *urlString = [NSString stringWithFormat:@"http://%@/gainspan/profile/tls?t=1470715355439",[sharedPrefrenceUtil getNSObject:LOCAL_IP_ADDRESS]];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString]];
     NSMutableDictionary *postData = [[NSMutableDictionary alloc] init];
     Byte myByteArray[16];
@@ -216,7 +187,7 @@
     hud.labelText = @"Please Wait...";
     [conncetion httpPostRequest:request forPostData:postData resultCallBack:^(NSDictionary *result, NSString *error) {
         
-        [MBProgressHUD hideHUDForView:self.navigationController.view animated:YES];
+        [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
         NSData *data = [result valueForKey:@"data"];
         NSUInteger len = data.length;
         uint8_t *bytes = (uint8_t *)[data bytes];
@@ -243,18 +214,24 @@
             
             if ([[dataArray objectAtIndex:5] integerValue] == 4)    // change program
             {
+                [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
                 [self.navigationController popViewControllerAnimated:YES];
             }
             else if ([[dataArray objectAtIndex:5] integerValue] == 3) // isPause
             {
+                [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
                 [self setPlayPauseButtonStatus:dataArray];
                 
             }
             else if ([[dataArray objectAtIndex:5] integerValue] == 1) // isPlay
             {
+                [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
                 [self setPlayPauseButtonStatus:dataArray];
             }
-            
+            else if (isReadStatus) {
+                isReadStatus = NO;
+                [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
+            }
             // set temprature
             self.tempTextField.text = [NSString stringWithFormat:@"%@C",[dataArray objectAtIndex:21]];
             
@@ -290,52 +267,7 @@
 -(void)getCurrentStatus:(NSNotification *)notification {
     
     NSArray  *dataArray = [[notification userInfo] objectForKey:@"myArray"];
-    isConnectionFail = NO;
-    [error1 removeAllObjects];
-    [error2 removeAllObjects];
-    if (dataArray.count > 37) {
-        
-        if ([[dataArray objectAtIndex:2] integerValue]== 129) {
-            
-            if ([[dataArray objectAtIndex:5] integerValue] == 4)    // change program
-            {
-                [self.navigationController popViewControllerAnimated:YES];
-            }
-            else if ([[dataArray objectAtIndex:5] integerValue] == 3) // isPause
-            {
-                [self setPlayPauseButtonStatus:dataArray];
-                
-            }
-            else if ([[dataArray objectAtIndex:5] integerValue] == 1) // isPlay
-            {
-                [self setPlayPauseButtonStatus:dataArray];
-            }
-            
-            // set temprature
-            self.tempTextField.text = [NSString stringWithFormat:@"%@C",[dataArray objectAtIndex:21]];
-            
-            // set state
-            self.statusTextField.text = [commonParsing getStateString:[[dataArray objectAtIndex:30] integerValue]];
-            
-            // set program
-            self.programLabel.text = [commonParsing getProgramString:[[dataArray objectAtIndex:6] integerValue]];
-            // set play pause
-            [self setPlayPauseButtonStatus:dataArray];
-            // Error1
-            [self getError1:dataArray];
-            //Error2
-            [self getError2:dataArray];
-            // process time
-            [self showProcessTime:dataArray];
-            
-        }
-        else {
-            // program commands
-        }
-    }
-    else {
-        // error case
-    }
+    [self getLocalCurrentStatus:dataArray];
 }
 
 -(void)getError1:(NSArray *)theArray {

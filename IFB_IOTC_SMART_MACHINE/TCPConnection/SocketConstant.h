@@ -17,6 +17,7 @@
 #define SOCKET_LOCAL_HOST @"192.168.240.1"
 #define SOCKET_LOCAL_PORT @"9091"
 
+#define LOCAL_IP_ADDRESS @"localIPAddress"
 // local testing
 //#define SOCKET_HOST @"10.0.5.130"
 //#define SOCKET_PORT @"8080"

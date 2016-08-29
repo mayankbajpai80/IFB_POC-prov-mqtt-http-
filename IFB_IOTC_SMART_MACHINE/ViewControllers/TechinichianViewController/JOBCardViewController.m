@@ -108,7 +108,6 @@
         NSMutableDictionary *postData = [[NSMutableDictionary alloc] init];
         MBProgressHUD *progressHud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
         progressHud.labelText = @"Please Wait....";
-        progressHud.dimBackground = YES;
         [apiCallManager httpPostRequest:request forPostData:postData resultCallBack:^(NSDictionary *result, NSString *error) {
             
             
