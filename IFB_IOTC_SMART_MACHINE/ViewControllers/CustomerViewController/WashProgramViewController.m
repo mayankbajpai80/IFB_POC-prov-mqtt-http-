@@ -114,6 +114,7 @@
     
     [byteArray removeAllObjects];
     NSString *urlString = [NSString stringWithFormat:@"http://%@/gainspan/profile/tls?t=1470715355439",[sharedPrefrenceUtil getNSObject:LOCAL_IP_ADDRESS]];
+    NSLog(@"%@", urlString);
     //NSString *urlString = @"http://10.0.6.209/gainspan/profile/tls?t=1470715355439";
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString]];
     NSMutableDictionary *postData = [[NSMutableDictionary alloc] init];

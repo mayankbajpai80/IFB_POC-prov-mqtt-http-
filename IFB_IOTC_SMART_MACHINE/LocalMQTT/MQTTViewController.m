@@ -107,7 +107,7 @@ void mqttDisconnectionFailed(void* context, MQTTAsync_failureData* response);
     //NSString *_subscriptionField = @"Response/20:f8:5e:dd:8:ce";
     NSLog(@"unsubscribe topic : %@", unsubscriptionTopic);
     if (_mqttClient==NULL) { return; }
-    if (unsubscriptionTopic.length) { printf("You need to write a subscription topic.\n"); return; }
+    if (!unsubscriptionTopic.length) { printf("You need to write a subscription topic.\n"); return; }
     
     int status;
     [self.view endEditing:YES];

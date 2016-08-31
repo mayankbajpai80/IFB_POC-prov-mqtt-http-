@@ -16,6 +16,7 @@
 #import "SocketConstant.h"
 #import "DeviceOpertaionViewController.h"
 #import "WashProgramViewController.h"
+#import "MySingleton.h"
 
 @interface ProgramsViewController ()
 {
@@ -64,7 +65,10 @@
 -(void)goToPrevious {
     
     [self.navigationController popViewControllerAnimated:YES];
-    // unsubcribe for mqtt topic..
+    if ([globalValues.isLocal isEqualToString:@"no"]) {
+        // unsubcribe for mqtt topic..
+        [globalValues.mqtt unsubscribeForTopic:[NSString stringWithFormat:@"%@",[sharedPrefrenceUtil getNSObject:SUBSCRIBE_TOPIC]]];
+    }
 }
 
 -(void)popviewVC {

@@ -74,6 +74,8 @@
     // establish CLoud MQTT connection
     mqtt = [[MQTTViewController alloc] init];
     globalValues.mqtt = mqtt;
+    // connect mqtt/cloud...
+    [globalValues.mqtt connectMQTT];
     // Local mdns service
     onlineMACs = [[NSMutableArray alloc] init];
     mdnsDictArray = [[NSMutableDictionary alloc] init];
@@ -117,28 +119,42 @@
         {
             isServiceFound = YES;
             [self hideHUD];
-            NSString *serviceMAC = [[[[[[pObjServiceInfo allKeys] objectAtIndex:0] componentsSeparatedByString:@"_"] objectAtIndex:0] componentsSeparatedByString:@"-"] objectAtIndex:1];
-            NSMutableString *macString = [[NSMutableString alloc] initWithString:@"20:f8:5e"];
-            for (int i =0; i < serviceMAC.length; i++) {
-                if (i%2 == 0) {
-                    [macString appendString:[NSString stringWithFormat:@":%c",[serviceMAC characterAtIndex:i]]];
+            for (int i =0; i<[[pObjServiceInfo allKeys] count] ; i++) {
+                
+                NSString *serviceMAC = [[[[[[pObjServiceInfo allKeys] objectAtIndex:i] componentsSeparatedByString:@"_"] objectAtIndex:0] componentsSeparatedByString:@"-"] objectAtIndex:1];
+                NSMutableString *macString = [[NSMutableString alloc] initWithString:@"20:f8:5e"];
+                for (int i =0; i < serviceMAC.length; i++) {
+                    if (i%2 == 0) {
+                        [macString appendString:[NSString stringWithFormat:@":%c",[serviceMAC characterAtIndex:i]]];
+                    }
+                    else {
+                        [macString appendString:[NSString stringWithFormat:@"%c",[serviceMAC characterAtIndex:i]]];
+                    }
                 }
-                else {
-                    [macString appendString:[NSString stringWithFormat:@"%c",[serviceMAC characterAtIndex:i]]];
+                if (![onlineMACs containsObject:macString]) {
+                    //mdnsDict = nil;
+                    //mdnsDict = [pObjServiceInfo valueForKey:[[pObjServiceInfo allKeys] objectAtIndex:i]];
+                    [onlineMACs addObject:macString];
+                    [self makeMDNSServiceDict:[pObjServiceInfo valueForKey:[[pObjServiceInfo allKeys] objectAtIndex:i]]];
+                    //[self.deviceListTableView reloadData];
                 }
-            }
-            NSLog(@"%@", macString);
-            if (![onlineMACs containsObject:macString]) {
-                mdnsDict = nil;
-                mdnsDict = [pObjServiceInfo valueForKey:[[pObjServiceInfo allKeys] objectAtIndex:0]];
-                [onlineMACs addObject:macString];
-                [self.deviceListTableView reloadData];
             }
         }
         else {
             NSLog(@"No IFB Service found...");
         }
     }
+}
+
+-(void)makeMDNSServiceDict: (NSMutableDictionary *)mdnsDictionary {
+    for (int i=0; i<deviceMacArray.count; i++) {
+        if ([onlineMACs containsObject:[deviceMacArray objectAtIndex:i]]) {
+            if ([mdnsDictArray valueForKey:[deviceNameArray objectAtIndex:i]] == nil) {
+                [mdnsDictArray setObject:mdnsDictionary forKey:[deviceNameArray objectAtIndex:i]];
+            }
+        }
+    }
+    [self.deviceListTableView reloadData];
 }
 
 #pragma mark - Customize navigation bar
@@ -211,8 +227,6 @@
             
             [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
             if ([[result valueForKey: @"status"] boolValue]) {
-                // connect mqtt/cloud...
-                [mqtt connectMQTT];
                 deviceListArray = [result valueForKey:@"message"];
                 [sharedPrefrenceUtil saveNSObject:deviceListArray forKey:DEVICE_LIST];
                 deviceNameArray = [deviceListArray valueForKey:@"deviceName"];
@@ -274,7 +288,7 @@
     else {
         
         if ([onlineMACs containsObject:[deviceMacArray objectAtIndex:indexPath.row]]) {
-            [mdnsDictArray setObject:mdnsDict forKey:[deviceNameArray objectAtIndex:indexPath.row]];
+            //[mdnsDictArray setObject:mdnsDict forKey:[deviceNameArray objectAtIndex:indexPath.row]];
             cell.deviceStatus.backgroundColor = [UIColor greenColor];
         }
         else {
@@ -292,7 +306,8 @@
             // subscribe for device.
             [sharedPrefrenceUtil saveNSObject:[deviceMacArray objectAtIndex:indexPath.row] forKey:@"currentDeviceMac"];
             NSString *subscribeTopic = [NSString stringWithFormat:@"Response/%@", [deviceMacArray objectAtIndex:indexPath.row ]];
-            [globalValues.mqtt subscribeForTopic:subscribeTopic];
+            [sharedPrefrenceUtil saveNSObject:subscribeTopic forKey:SUBSCRIBE_TOPIC];
+            [globalValues.mqtt subscribeForTopic:[NSString stringWithFormat:@"%@",[sharedPrefrenceUtil getNSObject:SUBSCRIBE_TOPIC]]];
             [self enterInDevice:indexPath];
         }
         else {
@@ -301,10 +316,10 @@
     }
     else {
         // get ip address of selected device and ping that device.
-        
         NSString *validIPAddress = [[[[mdnsDictArray objectForKey:[deviceNameArray objectAtIndex:indexPath.row]] objectForKey:@"ipAddress"] componentsSeparatedByString:@":"] objectAtIndex:0];
         if (validIPAddress != nil) {
             [sharedPrefrenceUtil saveNSObject:validIPAddress forKey:LOCAL_IP_ADDRESS];
+            NSLog(@"currnt ip:%@",validIPAddress);
             [self enterInDevice:indexPath];
         }
         else {

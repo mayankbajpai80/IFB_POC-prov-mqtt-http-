@@ -17,13 +17,18 @@
 #define SOCKET_LOCAL_HOST @"192.168.240.1"
 #define SOCKET_LOCAL_PORT @"9091"
 
-#define LOCAL_IP_ADDRESS @"localIPAddress"
 // local testing
 //#define SOCKET_HOST @"10.0.5.130"
 //#define SOCKET_PORT @"8080"
 
-#define REGISTER_DEVICE @"register"
 #define CONNECTION_STATUS @"connectionStatus"
+
+// mqtt
+#define SUBSCRIBE_TOPIC @"subscribeTopic"
+#define PUBLISH_TOIPC @"publishTopic"
+
+// local http
+#define LOCAL_IP_ADDRESS @"localIPAddress"
 
 // Basic Commands
 #define Machine_powerON @[@"0x63", @"0x0A", @"0x01", @"0x00", @"0x01", @"0x0A", @"0x00", @"0x00", @"0x00", @"0x00", @"0x79", @"0xF2"]
